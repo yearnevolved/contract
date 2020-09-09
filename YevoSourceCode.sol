@@ -352,6 +352,23 @@ contract ERC20 is IERC20 {
         emit Transfer(sender, recipient, amount);
     }
 
+    /** @dev Creates `amount` tokens and assigns them to `account`, increasing
+     * the total supply.
+     *
+     * Emits a `Transfer` event with `from` set to the zero address.
+     *
+     * Requirements
+     *
+     * - `to` cannot be the zero address.
+     */
+    function _mint(address account, uint256 amount) internal {
+        require(account != address(0), "ERC20: mint to the zero address");
+
+        _totalSupply = _totalSupply.add(amount);
+        _balances[account] = _balances[account].add(amount);
+        emit Transfer(address(0), account, amount);
+    }
+
      /**
      * @dev Destroys `amount` tokens from `account`, reducing the
      * total supply.
@@ -443,19 +460,92 @@ library Roles {
     }
 }
 
-// File: contracts\ERC20\TokenMintERC20Token.sol
+// File: contracts\open-zeppelin-contracts\access\roles\MinterRole.sol
+
+pragma solidity ^0.5.0;
+
+
+contract MinterRole {
+    using Roles for Roles.Role;
+
+    event MinterAdded(address indexed account);
+    event MinterRemoved(address indexed account);
+
+    Roles.Role private _minters;
+
+    constructor () internal {
+        _addMinter(msg.sender);
+    }
+
+    modifier onlyMinter() {
+        require(isMinter(msg.sender), "MinterRole: caller does not have the Minter role");
+        _;
+    }
+
+    function isMinter(address account) public view returns (bool) {
+        return _minters.has(account);
+    }
+
+    function addMinter(address account) public onlyMinter {
+        _addMinter(account);
+    }
+
+    function renounceMinter() public {
+        _removeMinter(msg.sender);
+    }
+
+    function _addMinter(address account) internal {
+        _minters.add(account);
+        emit MinterAdded(account);
+    }
+
+    function _removeMinter(address account) internal {
+        _minters.remove(account);
+        emit MinterRemoved(account);
+    }
+}
+
+// File: contracts\open-zeppelin-contracts\token\ERC20\ERC20Mintable.sol
+
+pragma solidity ^0.5.0;
+
+
+
+/**
+ * @dev Extension of `ERC20` that adds a set of accounts with the `MinterRole`,
+ * which have permission to mint (create) new tokens as they see fit.
+ *
+ * At construction, the deployer of the contract is the only minter.
+ */
+contract ERC20Mintable is ERC20, MinterRole {
+    /**
+     * @dev See `ERC20._mint`.
+     *
+     * Requirements:
+     *
+     * - the caller must have the `MinterRole`.
+     */
+    function mint(address account, uint256 amount) public onlyMinter returns (bool) {
+        _mint(account, amount);
+        return true;
+    }
+}
+
+// File: contracts\ERC20\TokenMintERC20MintableToken.sol
 
 pragma solidity ^0.5.0;
 
 
 /**
- 
- * @dev ERC20 token with burning and optional functions implemented.
+ * @title TokenMintERC20MintableToken
+ * @author TokenMint (visit https://tokenmint.io)
+ *
+ * @dev Mintable ERC20 token with burning and optional functions implemented.
  * Any address with minter role can mint new tokens.
  * For full specification of ERC-20 standard see:
  * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
  */
-contract TokenMintERC20 is ERC20 {
+contract TokenMintERC20MintableToken is ERC20Mintable {
 
     string private _name;
     string private _symbol;
@@ -466,19 +556,27 @@ contract TokenMintERC20 is ERC20 {
      * @param name name of the token
      * @param symbol symbol of the token, 3-4 chars is recommended
      * @param decimals number of decimal places of one token unit, 18 is widely used
-     * @param totalSupply total supply of tokens in lowest units (depending on decimals)
+     * @param initialSupply initial supply of tokens in lowest units (depending on decimals)
      * @param tokenOwnerAddress address that gets 100% of token supply
      */
-    constructor(string memory name, string memory symbol, uint8 decimals, uint256 totalSupply, address payable feeReceiver, address tokenOwnerAddress) public payable {
+    constructor(string memory name, string memory symbol, uint8 decimals, uint256 initialSupply, address payable feeReceiver, address tokenOwnerAddress) public payable {
       _name = name;
       _symbol = symbol;
       _decimals = decimals;
 
-      // set tokenOwnerAddress as owner of total supply
-      _transfer(tokenOwnerAddress, totalSupply);
+      // set tokenOwnerAddress as owner of initial supply, more tokens can be minted later
+      _mint(tokenOwnerAddress, initialSupply);
 
       // pay the service fee for contract deployment
       feeReceiver.transfer(msg.value);
+    }
+
+    /**
+     * @dev transfers minter role from msg.sender to newMinter
+     */
+    function transferMinterRole(address newMinter) public {
+      addMinter(newMinter);
+      renounceMinter();
     }
 
     /**
