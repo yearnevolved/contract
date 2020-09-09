@@ -1,5 +1,3 @@
-
-
 def storage:
   stor0 is uint256 at storage 0
   tokenAddress is addr at storage 1
