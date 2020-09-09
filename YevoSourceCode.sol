@@ -543,8 +543,6 @@ pragma solidity ^0.5.0;
 
 
 /**
- * @title TokenMintERC20MintableToken
- * @author TokenMint (visit https://tokenmint.io)
  *
  * @dev Mintable ERC20 token with burning and optional functions implemented.
  * Any address with minter role can mint new tokens.
